@@ -1,0 +1,697 @@
+<!doctype html>
+<!-- AIJS_REVIEW_CENTER_ENHANCEMENTS_V1 -->
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Automation Job Seeker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style id="aijs-review-tabs-v2-style">
+.review-tablist{display:flex;align-items:stretch;gap:9px;flex-wrap:wrap;margin:0 0 18px;padding:0 0 12px;border-bottom:1px solid #273953}
+.review-tab{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:11px 15px;border:1px solid #2b3f5d;border-radius:11px;background:#0d1728;color:#b9c8dc;font:inherit;font-size:13px;font-weight:700;line-height:1.35;cursor:pointer;transition:background .15s ease,border-color .15s ease,color .15s ease;white-space:nowrap}
+.review-tab:hover{border-color:#5b9bff;color:#f8fbff}
+.review-tab:focus-visible{outline:2px solid #7db5ff;outline-offset:3px}
+.review-tab.is-active{background:#1a2d47;border-color:#5798f6;color:#fff;box-shadow:inset 0 -2px 0 #5798f6}
+.review-tab-count{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#243650;color:#dceaff;font-size:11px;font-weight:800}
+.review-tab.is-active .review-tab-count{background:#3578d4;color:#fff}
+.review-tab-panel[hidden]{display:none!important}
+.review-tab-panel{margin-top:0}
+@media(max-width:720px){.review-tablist{flex-wrap:nowrap;overflow-x:auto;padding:2px 2px 12px;scrollbar-width:thin}.review-tab{flex:0 0 auto;padding:10px 12px;font-size:12px}}
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand-mark">AJ</div>
+    <div>
+      <p class="eyebrow">PERSONAL AUTOMATION PROJECT</p>
+      <h1>AI Automation Job Seeker</h1>
+      <p class="subhead">Job discovery, matching, and manual review</p>
+    </div>
+    <div class="local-tag"><span></span> Local dashboard</div>
+  </header>
+
+  <div class="app-layout">
+    <aside class="sidebar" aria-label="Menu utama">
+      <div class="sidebar-label">WORKSPACE</div>
+      <a class="nav-link {{ 'active' if page == 'overview' else '' }}" href="{{ url_for('overview_page') }}"><span class="nav-icon">⌂</span>Overview</a>
+      <a class="nav-link {{ 'active' if page == 'review' else '' }}" href="{{ url_for('review_page') }}"><span class="nav-icon">✓</span>Review Center{% if application_stats.pending_approval or application_stats.drafts_to_review or application_stats.approved or stats.queued_jobs %}<span class="nav-count">{{ (application_stats.pending_approval or 0) + (application_stats.drafts_to_review or 0) + (application_stats.approved or 0) + (stats.queued_jobs or 0) }}</span>{% endif %}</a>
+      <a class="nav-link {{ 'active' if page == 'jobs' else '' }}" href="{{ url_for('jobs_page') }}"><span class="nav-icon">⌕</span>Job Discovery</a>
+      <a class="nav-link {{ 'active' if page == 'documents' else '' }}" href="{{ url_for('documents_page') }}"><span class="nav-icon">▤</span>CV &amp; Documents</a>
+      <a class="nav-link {{ 'active' if page == 'automation' else '' }}" href="{{ url_for('automation_page') }}"><span class="nav-icon">↻</span>Automation</a>
+      <a class="nav-link {{ 'active' if page == 'settings' else '' }}" href="{{ url_for('settings_page') }}"><span class="nav-icon">⚙</span>Settings</a>
+      <div class="sidebar-foot"><span class="online-dot"></span> Local workspace<br><small>Data stays on this computer</small></div>
+    </aside>
+    <main class="container">
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">WORKSPACE / {{ page|replace('_', ' ')|upper }}</p>
+          <h2>{{ {'overview':'Overview','review':'Review Center','jobs':'Job Discovery','documents':'CV & Documents','automation':'Automation','settings':'Settings'}.get(page, 'Overview') }}</h2>
+          <p class="page-description">{{ {'overview':'Ringkasan performa pencarian dan lamaran.','review':'Tinjau draf dan catat pengiriman yang benar-benar sudah dilakukan.','jobs':'Cari dan evaluasi lowongan yang tersimpan.','documents':'Status berkas kandidat dan dokumen aplikasi.','automation':'Status komponen otomatisasi lokal.','settings':'Informasi konfigurasi workspace lokal.'}.get(page, '') }}</p>
+        </div>
+        <span class="local-pill"><span></span> LOCAL ONLY</span>
+      </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-stack" aria-live="polite">
+          {% for category, message in messages %}
+            <div class="flash-message {{ 'flash-error' if category == 'error' else 'flash-success' }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% if error %}
+      <div class="alert"><strong>Database belum terhubung.</strong><br>{{ error }}</div>
+    {% endif %}
+
+    {% if not profile_found and not error %}
+      <div class="notice">Profil scoring “Remote Automation Engineer” belum ditemukan. Jalankan <code>python score_jobs.py</code> terlebih dahulu agar skor dan status kelayakan ditampilkan.</div>
+    {% endif %}
+
+{% if page == "overview" %}
+    <section class="stats-grid" aria-label="Ringkasan lowongan">
+      <article class="stat-card"><span>Total lowongan</span><strong>{{ stats.total_jobs or 0 }}</strong><small>Data tersimpan di MySQL</small></article>
+      <article class="stat-card"><span>Skor ≥ 80</span><strong>{{ stats.high_match or 0 }}</strong><small>Prioritas untuk ditinjau</small></article>
+      <article class="stat-card"><span>Worldwide</span><strong>{{ stats.worldwide_claimed or 0 }}</strong><small>Perlu verifikasi negara kerja</small></article>
+      <article class="stat-card"><span>Dipilih untuk review</span><strong>{{ stats.queued_jobs or 0 }}</strong><small>Belum dibuat menjadi draf lamaran</small></article>
+    </section>
+
+    <section class="location-summary" aria-label="Ringkasan status lokasi">
+      <strong>Status lokasi:</strong>
+      {{ stats.australia_listed or 0 }} Australia
+      <span class="summary-separator">·</span>
+      {{ stats.singapore_listed or 0 }} Singapura
+      <span class="summary-separator">·</span>
+      {{ stats.worldwide_claimed or 0 }} worldwide
+      <span class="summary-separator">·</span>
+      {{ stats.location_restrictions or 0 }} indikasi pembatasan
+      <span class="summary-note">Lowongan berstatus <code>new</code>: {{ stats.new_jobs or 0 }}.</span>
+    </section>
+
+    <section class="panel manual-run-card">
+      <div class="manual-run-copy">
+        <h3>Perbarui lowongan sekarang</h3>
+        <p>Jalankan pencarian lowongan dan perhitungan skor dari dashboard tanpa membuka n8n. Proses ini tidak mengirim lamaran.</p>
+      </div>
+      {% if n8n_manual_configured %}
+        <form method="post" action="{{ url_for('trigger_manual_n8n_workflow') }}" data-confirm="Jalankan Job Discovery dan scoring sekarang? Proses ini tidak mengirim lamaran." onsubmit="return aijsSubmitManualRun(this);">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="return_to" value="overview">
+          <button type="submit" class="manual-run-button">↻ Jalankan sekarang</button>
+          <span class="manual-run-progress" role="status" aria-live="polite"></span>
+        </form>
+      {% else %}
+        <a class="manual-run-button manual-run-link" href="{{ url_for('automation_page') }}">Atur pemicu manual →</a>
+      {% endif %}
+    </section>
+
+    <div class="overview-charts">
+      <section class="panel chart-panel" aria-label="Distribusi skor kecocokan">
+        <div class="chart-heading"><div><h3>Distribusi skor kecocokan</h3><p>Jumlah lowongan menurut skor terbaru</p></div><span class="chart-symbol">▥</span></div>
+        {% set total_jobs = stats.total_jobs or 1 %}
+        <div class="chart-row"><div class="chart-row-label"><span>Skor 80–100</span><strong>{{ stats.high_match or 0 }}</strong></div><div class="chart-track"><span class="chart-bar chart-good" style="width: {{ [100, ((stats.high_match or 0) / total_jobs * 100)|round(1)]|min }}%"></span></div></div>
+        <div class="chart-row"><div class="chart-row-label"><span>Skor 60–79</span><strong>{{ stats.mid_match or 0 }}</strong></div><div class="chart-track"><span class="chart-bar chart-medium" style="width: {{ [100, ((stats.mid_match or 0) / total_jobs * 100)|round(1)]|min }}%"></span></div></div>
+        <div class="chart-row"><div class="chart-row-label"><span>Skor di bawah 60</span><strong>{{ stats.low_match or 0 }}</strong></div><div class="chart-track"><span class="chart-bar chart-low" style="width: {{ [100, ((stats.low_match or 0) / total_jobs * 100)|round(1)]|min }}%"></span></div></div>
+        <p class="chart-footnote">Angka dihitung dari data lowongan dan hasil scoring yang tersimpan.</p>
+      </section>
+
+      <section class="panel chart-panel" aria-label="Kelayakan lokasi">
+        <div class="chart-heading"><div><h3>Prioritas lokasi</h3><p>Petunjuk lokasi dari sumber lowongan, bukan jaminan izin kerja</p></div><span class="chart-symbol">◎</span></div>
+        {% set location_rows = [('Australia terdaftar', stats.australia_listed or 0), ('Singapura terdaftar', stats.singapore_listed or 0), ('Worldwide', stats.worldwide_claimed or 0), ('Perlu cek pembatasan', stats.location_restrictions or 0), ('Belum cocok/terkonfirmasi', stats.location_not_matched or 0)] %}
+        {% for label, count in location_rows %}
+        <div class="chart-row"><div class="chart-row-label"><span>{{ label }}</span><strong>{{ count }}</strong></div><div class="chart-track"><span class="chart-bar chart-location" style="width: {{ [100, (count / total_jobs * 100)|round(1)]|min }}%"></span></div></div>
+        {% endfor %}
+        <p class="chart-footnote">Periksa detail iklan resmi sebelum mengajukan lamaran.</p>
+      </section>
+
+      <section class="panel chart-panel chart-pipeline" aria-label="Pipeline review dan lamaran">
+        <div class="chart-heading"><div><h3>Review &amp; lamaran</h3><p>Progres pilihan, draf, dan status manual</p></div><span class="chart-symbol">↗</span></div>
+        {% set total_pipeline = (stats.queued_jobs or 0) + (application_stats.total_applications or 0) %}
+        {% set pipeline_base = total_pipeline or 1 %}
+        {% set pipeline_rows = [('Lowongan dipilih', stats.queued_jobs or 0), ('Draf perlu ditinjau', application_stats.drafts_to_review or 0), ('Draf disetujui', application_stats.approved or 0), ('Pengiriman dicatat', application_stats.with_applied_at or 0)] %}
+        {% for label, count in pipeline_rows %}
+        <div class="chart-row"><div class="chart-row-label"><span>{{ label }}</span><strong>{{ count }}</strong></div><div class="chart-track"><span class="chart-bar chart-pipeline-bar" style="width: {{ [100, (count / pipeline_base * 100)|round(1)]|min }}%"></span></div></div>
+        {% endfor %}
+        <a class="chart-link" href="{{ url_for('review_page') }}">Buka Review Center →</a>
+      </section>
+    </div>
+
+    <section class="panel source-panel" aria-label="Katalog sumber lowongan">
+      <div class="panel-heading source-panel-heading">
+        <div>
+          <h2>Sumber lowongan</h2>
+          <p>{{ stats.sources_registered or 0 }} dari {{ stats.sources_total or 10 }} sumber tercatat · {{ stats.sources_with_jobs or 0 }} memiliki lowongan tersimpan · {{ stats.sources_run_success or 0 }} fetch berhasil · {{ stats.sources_run_empty or 0 }} kosong · {{ stats.sources_run_failed or 0 }} gagal · {{ stats.sources_never_run or 0 }} belum diuji.</p>
+        </div>
+        <span class="result-count">{{ source_stats|length }} sumber</span>
+      </div>
+      <p class="source-panel-note">Jumlah tersimpan adalah data kumulatif di MySQL. Status fetch, jumlah lowongan yang diambil, kecocokan role, lowongan baru, duplikat, durasi, dan error menunjukkan eksekusi Job Discovery terakhir untuk setiap sumber. Sumber bernilai 0 tidak otomatis berarti gagal.</p>
+      <label class="source-catalog-search" for="source-catalog-search-input"><span>Cari perusahaan atau sumber</span><input id="source-catalog-search-input" type="search" placeholder="Contoh: OpenAI, Greenhouse, RemoteOK" autocomplete="off"></label>
+      <div class="source-grid" id="source-catalog-grid">
+        {% for source in source_stats %}
+        <article class="source-card" data-source-search="{{ (source.name ~ ' ' ~ source.source_type)|lower|e }}">
+          <div class="source-card-top">
+            <strong>{{ source.name }}</strong>
+            {% if source.last_run_status == 'running' %}
+              <span class="source-status source-run-running">Sedang berjalan</span>
+            {% elif source.last_run_status == 'interrupted' %}
+              <span class="source-status source-run-failed">Execution terputus</span>
+            {% elif source.last_run_status == 'success' %}
+              <span class="source-status source-run-success">Fetch berhasil</span>
+            {% elif source.last_run_status == 'empty' %}
+              <span class="source-status source-run-empty">0 hasil feed</span>
+            {% elif source.last_run_status == 'failed' %}
+              <span class="source-status source-run-failed">Fetch gagal</span>
+            {% elif source.last_run_status == 'save_failed' %}
+              <span class="source-status source-run-failed">Gagal simpan</span>
+            {% else %}
+              <span class="source-status source-not-registered">Belum diuji</span>
+            {% endif %}
+          </div>
+          <div class="source-count"><strong>{{ source.stored_jobs }}</strong><span>lowongan tersimpan</span></div>
+          <small>Posting terbaru: {{ source.latest_posted_at_display }}</small>
+          {% if source.last_run_status %}
+          <div class="source-run-meta">
+            {% if source.last_run_status == 'running' %}
+            <small>Dimulai: {{ source.last_run_at_display }} · masih berjalan</small>
+            {% else %}
+            <small>Run: {{ source.last_run_at_display }} · {{ source.last_run_duration_ms }} ms</small>
+            {% endif %}
+            <small>Diambil {{ source.last_run_fetched }} · cocok role {{ source.last_run_matched }} · baru {{ source.last_run_inserted }}</small>
+            <small>Duplikat DB {{ source.last_run_duplicates }} · dalam feed {{ source.last_run_feed_duplicates }}</small>
+            <small>Ditolak role {{ source.last_run_rejected }} · URL invalid {{ source.last_run_invalid_urls }}</small>
+            {% if source.last_run_error %}<small class="source-run-error" title="{{ source.last_run_error }}">Error: {{ source.last_run_error|truncate(125, true, '…') }}</small>{% elif source.last_run_status == 'interrupted' %}<small class="source-run-error">Tidak ada catatan selesai lebih dari 20 menit; periksa log API dan n8n.</small>{% endif %}
+          </div>
+          {% else %}
+          <small>Belum ada riwayat eksekusi untuk sumber ini.</small>
+          {% endif %}
+          <a href="{{ source.source_url }}" target="_blank" rel="noopener noreferrer">Situs / feed resmi ↗</a>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+{% endif %}
+
+    {% if page == "jobs" %}
+    <section class="panel">
+      <div class="panel-heading">
+        <div>
+          <h2>Daftar lowongan</h2>
+          <p>Menampilkan seluruh hasil secara bertahap. Pengurutan skor menggunakan skor terbaru; lokasi hanya menjadi pemecah urutan jika skor sama.</p>
+        </div>
+        <span class="result-count">{{ jobs_range_start }}–{{ jobs_range_end }} dari {{ jobs_total }} lowongan</span>
+      </div>
+      <form class="filters" method="get" action="{{ url_for('jobs_page') }}">
+        <input type="hidden" name="jobs_page" value="1">
+        <label class="search-field"><span>Cari</span><input type="search" name="q" value="{{ search }}" placeholder="Jabatan, perusahaan, lokasi..."></label>
+        <label><span>Sumber</span><select name="source"><option value="">Semua sumber</option>{% for item in sources %}<option value="{{ item }}" {% if selected_source == item %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+        <label><span>Kelayakan lokasi</span><select name="eligibility"><option value="">Semua status</option>{% for item in statuses %}<option value="{{ item }}" {% if selected_eligibility == item %}selected{% endif %}>{{ eligibility_labels.get(item, item|replace('_', ' ')|title) }}</option>{% endfor %}</select></label>
+        <label class="score-filter"><span>Skor minimum</span><select name="min_score">{% for value in [0, 50, 60, 70, 80, 90] %}<option value="{{ value }}" {% if min_score == value %}selected{% endif %}>{{ value }}+</option>{% endfor %}</select></label>
+        <label><span>Urutkan</span><select name="jobs_sort">
+          <option value="score" {% if jobs_sort == 'score' %}selected{% endif %}>Skor kecocokan tertinggi</option>
+          <option value="newest" {% if jobs_sort == 'newest' %}selected{% endif %}>Terbaru ditambahkan ke database</option>
+          <option value="posted" {% if jobs_sort == 'posted' %}selected{% endif %}>Tanggal posting terbaru</option>
+        </select></label>
+        <a class="reset-link" href="{{ url_for('jobs_page') }}">Reset</a>
+      </form>
+
+      {% if jobs %}
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Lowongan</th><th>Sumber</th><th>Lokasi</th><th>Skor</th><th>Status lokasi</th><th>Diposting</th><th>Batas tayang / tanggal ditutup</th><th>Tindakan review</th><th></th></tr></thead>
+          <tbody>
+          {% for job in jobs %}
+            <tr>
+              <td class="job-cell"><strong>{{ job.title or 'Untitled' }}</strong><span>{{ job.company_name }}</span><small>{{ job.job_status or '—' }} · ID {{ job.id }}</small></td>
+              <td><span class="source-chip">{{ job.source_name }}</span></td>
+              <td class="location-cell"><span>{{ job.display_location or job.location }}</span>{% if job.country %}<small class="subcell">{{ job.country }}</small>{% endif %}{% if job.location_details %}<details class="location-details"><summary>Penjelasan lokasi &amp; jam kerja</summary><span>{{ job.location_details }}</span></details>{% endif %}</td>
+              <td>{% if job.overall_score is not none %}<span class="score {% if job.overall_score >= 80 %}score-high{% elif job.overall_score >= 60 %}score-mid{% else %}score-low{% endif %}">{{ '%.0f'|format(job.overall_score) }}</span><small class="subcell">Skill {{ '%.0f'|format(job.skill_score or 0) }} · Role {{ '%.0f'|format(job.role_score or 0) }}</small><small class="subcell">Skor diperbarui: {{ job.scored_at_display }}</small>{% else %}<span class="muted">Belum dinilai</span>{% endif %}</td>
+              <td>{% if job.eligibility_status %}<span class="status-chip">{{ eligibility_labels.get(job.eligibility_status, job.eligibility_status|replace('_', ' ')|title) }}</span>{% else %}<span class="muted">Belum dicek</span>{% endif %}</td>
+              <td class="date-cell"><strong>{{ job.posted_at_display or 'Tanggal tidak tersedia' }}</strong><small class="subcell">Tanggal dari sumber</small></td>
+              <td class="date-cell"><strong>{{ job.closing_at_display or 'Tidak dicantumkan oleh sumber' }}</strong>{% if job.closing_at %}<small class="subcell">Tanggal dari sumber; iklan bisa ditutup lebih awal</small>{% else %}<small class="subcell">Tidak ada tanggal resmi; cek halaman lowongan</small>{% endif %}</td>
+              <td class="queue-action-cell">
+                {% if job.in_review_queue %}
+                  <span class="status-chip queued-chip">Sudah ada di daftar pilihan</span>
+                  <form method="post" action="{{ url_for('queue_job', job_id=job.id) }}" class="queue-form" onsubmit="return confirm('Hapus lowongan ini dari daftar pilihan? Data lowongan, skor, dan draf lamaran tidak ikut dihapus.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="return_to" value="jobs">
+                    <input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="source" value="{{ selected_source }}"><input type="hidden" name="eligibility" value="{{ selected_eligibility }}"><input type="hidden" name="min_score" value="{{ min_score }}"><input type="hidden" name="jobs_page" value="{{ jobs_page }}"><input type="hidden" name="jobs_sort" value="{{ jobs_sort }}">
+                    <button type="submit" class="queue-button queue-remove">Hapus dari pilihan</button>
+                  </form>
+                {% else %}
+                  {% if job.has_application %}
+                    <span class="status-chip">Catatan ada di Application Review</span>
+                    <a class="open-link" href="{{ url_for('review_page') }}#application-review">Lihat di Application Review ↓</a>
+                  {% endif %}
+                  <form method="post" action="{{ url_for('queue_job', job_id=job.id) }}" class="queue-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="add"><input type="hidden" name="return_to" value="jobs">
+                    <input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="source" value="{{ selected_source }}"><input type="hidden" name="eligibility" value="{{ selected_eligibility }}"><input type="hidden" name="min_score" value="{{ min_score }}"><input type="hidden" name="jobs_page" value="{{ jobs_page }}"><input type="hidden" name="jobs_sort" value="{{ jobs_sort }}">
+                    <button type="submit" class="queue-button">＋ {{ 'Tambahkan ke daftar pilihan' if job.has_application else 'Tambahkan ke Review Center' }}</button>
+                  </form>
+                {% endif %}
+              </td>
+              <td><a class="open-link" href="{{ job.job_url }}" target="_blank" rel="noopener noreferrer">Buka ↗</a></td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <nav class="jobs-pagination" aria-label="Navigasi halaman lowongan">
+        <span class="jobs-pagination-summary">Menampilkan {{ jobs_range_start }}–{{ jobs_range_end }} dari {{ jobs_total }}</span>
+        <div class="jobs-pagination-controls">
+          {% if jobs_page > 1 %}
+            <a class="jobs-page-link" href="{{ url_for('jobs_page', q=search, source=selected_source, eligibility=selected_eligibility, min_score=min_score, jobs_sort=jobs_sort, jobs_page=jobs_page-1) }}" aria-label="Halaman sebelumnya">‹ Sebelumnya</a>
+          {% else %}<span class="jobs-page-link is-disabled">‹ Sebelumnya</span>{% endif %}
+          {% for p in jobs_page_numbers %}
+            {% if not loop.first and p - jobs_page_numbers[loop.index0 - 1] > 1 %}<span class="jobs-page-ellipsis">…</span>{% endif %}
+            {% if p == jobs_page %}<span class="jobs-page-link is-current" aria-current="page">{{ p }}</span>
+            {% else %}<a class="jobs-page-link" href="{{ url_for('jobs_page', q=search, source=selected_source, eligibility=selected_eligibility, min_score=min_score, jobs_sort=jobs_sort, jobs_page=p) }}">{{ p }}</a>{% endif %}
+          {% endfor %}
+          {% if jobs_page < jobs_total_pages %}
+            <a class="jobs-page-link" href="{{ url_for('jobs_page', q=search, source=selected_source, eligibility=selected_eligibility, min_score=min_score, jobs_sort=jobs_sort, jobs_page=jobs_page+1) }}" aria-label="Halaman berikutnya">Berikutnya ›</a>
+          {% else %}<span class="jobs-page-link is-disabled">Berikutnya ›</span>{% endif %}
+        </div>
+      </nav>
+      {% else %}
+        <div class="empty-state"><div class="empty-icon">⌕</div><h3>Belum ada hasil yang cocok</h3><p>Tidak ada lowongan yang cocok dengan filter ini. Coba kurangi skor minimum atau reset filter.</p></div>
+      {% endif %}
+    </section>
+
+
+{% endif %}
+
+    {% if page == "review" %}
+    <!-- AIJS_REVIEW_CENTER_TABS_V2 -->
+    <div class="review-tablist" id="review-tablist" role="tablist" aria-label="Bagian Review Center">
+      <button type="button" class="review-tab{% if review_queue or (not applications and not submitted_applications) %} is-active{% endif %}" id="tab-review-queue" role="tab" aria-controls="review-queue-panel" aria-selected="{% if review_queue or (not applications and not submitted_applications) %}true{% else %}false{% endif %}" tabindex="{% if review_queue or (not applications and not submitted_applications) %}0{% else %}-1{% endif %}" data-review-panel="review-queue-panel">
+        <span>Lowongan untuk Ditinjau</span><span class="review-tab-count">{{ review_queue|length }}</span>
+      </button>
+      <button type="button" class="review-tab{% if not review_queue and applications %} is-active{% endif %}" id="tab-application-review" role="tab" aria-controls="application-review" aria-selected="{% if not review_queue and applications %}true{% else %}false{% endif %}" tabindex="{% if not review_queue and applications %}0{% else %}-1{% endif %}" data-review-panel="application-review">
+        <span>Application Review</span><span class="review-tab-count">{{ applications|length }}</span>
+      </button>
+      <button type="button" class="review-tab{% if not review_queue and not applications and submitted_applications %} is-active{% endif %}" id="tab-submitted-applications" role="tab" aria-controls="submitted-applications" aria-selected="{% if not review_queue and not applications and submitted_applications %}true{% else %}false{% endif %}" tabindex="{% if not review_queue and not applications and submitted_applications %}0{% else %}-1{% endif %}" data-review-panel="submitted-applications">
+        <span>Lamaran Sudah Dikirim</span><span class="review-tab-count">{{ submitted_applications|length }}</span>
+      </button>
+    </div>
+    <section class="panel application-panel selected-jobs-panel review-tab-panel" id="review-queue-panel" role="tabpanel" aria-labelledby="tab-review-queue" aria-label="Lowongan pilihan untuk ditinjau"{% if not review_queue and (applications or submitted_applications) %} hidden{% endif %}>
+      <div class="panel-heading">
+        <div><h2>Lowongan pilihan untuk ditinjau</h2><p>Daftar pilihan terpisah dari draf lamaran di bawah. Lowongan yang sudah memiliki draf tetap bisa ditambahkan ke daftar pilihan; menghapus pilihan tidak menghapus draf atau data lowongan.</p></div>
+        <span class="result-count">{{ review_queue|length }} dipilih</span>
+      </div>
+      {% if review_queue %}
+      <div class="table-wrap">
+        <table class="applications-table selected-jobs-table">
+          <thead><tr><th>No.</th><th>Lowongan</th><th>Skor</th><th>Lokasi</th><th>Status lokasi</th><th>Tautan resmi</th><th>Tindakan</th></tr></thead>
+          <tbody>
+          {% for item in review_queue %}
+            <tr>
+              <td><span class="application-id">#{{ loop.index }}</span><small class="subcell">ID lowongan {{ item.job_id }}</small><small class="subcell">Dipilih {{ item.created_at.strftime('%Y-%m-%d') if item.created_at and item.created_at.strftime is defined else '' }}</small></td>
+              <td class="job-cell"><strong>{{ item.title or 'Untitled' }}</strong><span>{{ item.company_name }}</span></td>
+              <td>{% if item.overall_score is not none %}<span class="score {% if item.overall_score >= 80 %}score-high{% elif item.overall_score >= 60 %}score-mid{% else %}score-low{% endif %}">{{ '%.0f'|format(item.overall_score) }}</span>{% else %}<span class="muted">Belum dinilai</span>{% endif %}</td>
+              <td class="location-cell">{{ item.display_location or item.location or 'Lokasi tidak tercantum' }}{% if item.location_details %}<details class="location-details"><summary>Penjelasan lokasi &amp; jam kerja</summary><span>{{ item.location_details }}</span></details>{% endif %}</td>
+              <td>{% if item.eligibility_status %}<span class="status-chip">{{ eligibility_labels.get(item.eligibility_status, item.eligibility_status|replace('_', ' ')|title) }}</span>{% else %}<span class="muted">Belum dicek</span>{% endif %}</td>
+              <td>{% if item.job_url %}<a class="open-link" href="{{ item.job_url }}" target="_blank" rel="noopener noreferrer">Buka ↗</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td class="actions-cell">
+                {% if item.has_application %}
+                  <span class="status-chip">Draf sudah ada</span>
+                  <a class="chart-link" href="#application-review">Lihat draf di bawah ↓</a>
+                {% else %}
+                  <form method="post" action="{{ url_for('create_job_draft', job_id=item.job_id) }}" class="action-form" onsubmit="return confirm('Buat draf surat lamaran dengan AI untuk lowongan ini? Proses dapat memerlukan waktu dan tidak mengirim lamaran.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="action-button approve-button">Buat draf AI</button>
+                  </form>
+                {% endif %}
+                <form method="post" action="{{ url_for('queue_job', job_id=item.job_id) }}" class="action-form" onsubmit="return confirm('Hapus lowongan ini dari daftar pilihan? Data lowongan, skor, dan draf lamaran tidak ikut dihapus.');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="action" value="remove"><input type="hidden" name="return_to" value="review"><button type="submit" class="action-button delete-button">Hapus dari pilihan</button></form>
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="empty-state"><div class="empty-icon">⌕</div><h3>Belum ada lowongan pilihan</h3><p>Buka Job Discovery, lalu klik “Tambahkan ke Review Center” pada lowongan yang ingin kamu tinjau.</p><p><a class="chart-link" href="{{ url_for('jobs_page') }}">Pilih lowongan dari Job Discovery →</a></p></div>
+      {% endif %}
+    </section>
+
+    <section class="panel application-panel submitted-applications-panel review-tab-panel" aria-label="Lamaran sudah dikirim" id="submitted-applications" role="tabpanel" aria-labelledby="tab-submitted-applications"{% if review_queue or applications %} hidden{% endif %}>
+      <div class="panel-heading">
+        <div>
+          <h2>Lamaran Sudah Dikirim</h2>
+          <p>Riwayat lowongan yang kamu konfirmasi telah dikirim melalui situs resmi. Dashboard hanya mencatat pengiriman; tidak mengirim lamaran secara otomatis.</p>
+        </div>
+        <span class="result-count">{{ submitted_applications|length }} terkirim</span>
+      </div>
+      {% if submitted_applications %}
+      <div class="table-wrap">
+        <table class="applications-table submitted-applications-table">
+          <thead><tr><th>Application ID</th><th>Lowongan</th><th>Skor</th><th>Tanggal dikirim</th><th>Surat lamaran</th><th>Tautan resmi</th></tr></thead>
+          <tbody>
+          {% for item in submitted_applications %}
+            <tr>
+              <td><span class="application-id">{{ loop.index }}</span><small class="subcell">Job ID {{ item.job_id }}</small></td>
+              <td class="job-cell"><strong>{{ item.title or 'Untitled' }}</strong><span>{{ item.company_name }}</span><small>{{ item.display_location or item.location or 'Lokasi tidak tercantum' }}</small></td>
+              <td>{% if item.match_score is not none %}<span class="score {% if item.match_score >= 80 %}score-high{% elif item.match_score >= 60 %}score-mid{% else %}score-low{% endif %}">{{ '%.0f'|format(item.match_score) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td>{% if item.applied_at %}<span class="status-chip submitted-chip">Terkirim</span><small class="subcell">{{ item.applied_at.strftime('%Y-%m-%d %H:%M') if item.applied_at.strftime is defined else item.applied_at }}</small>{% else %}<span class="status-chip submitted-chip">Status terkirim</span><small class="subcell">Konfirmasi manual tersimpan</small>{% endif %}</td>
+              <td class="letter-cell">{% if item.cover_letter %}<details class="letter-preview"><summary>Lihat surat</summary><div class="letter-text">{{ item.cover_letter }}<br><br>Kind regards,<br>Claudia</div></details><a class="open-link pdf-download-link" href="{{ url_for('application_cover_letter_pdf', application_id=item.application_id) }}">Unduh PDF ↗</a>{% else %}<span class="muted">Tidak tersedia</span>{% endif %}</td>
+              <td>{% if item.job_url %}<a class="open-link" href="{{ item.job_url }}" target="_blank" rel="noopener noreferrer">Buka ↗</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="empty-state"><div class="empty-icon">↗</div><h3>Belum ada lamaran yang tercatat terkirim</h3><p>Setelah kamu mengirim melalui situs resmi, buka Application Review, centang konfirmasi pengiriman, lalu klik “Catat pengiriman”. Lamaran akan muncul di sini.</p></div>
+      {% endif %}
+    </section>
+
+    <section class="panel application-panel review-tab-panel" aria-label="Application review" id="application-review" role="tabpanel" aria-labelledby="tab-application-review"{% if review_queue or (not applications and submitted_applications) %} hidden{% endif %}>
+      <div class="panel-heading">
+        <div>
+          <h2>Application Review</h2>
+          <p>Kelola status review di sini. Persetujuan tidak mengirim lamaran; tanggal pengiriman hanya dicatat setelah kamu mengirim lewat situs resmi.</p>
+          <div class="application-summary">
+            <span>Total: <strong>{{ application_stats.total_applications or 0 }}</strong></span>
+            <span>Menunggu persetujuan: <strong>{{ application_stats.pending_approval or 0 }}</strong></span>
+            <span>Draf perlu ditinjau: <strong>{{ application_stats.drafts_to_review or 0 }}</strong></span>
+            <span>Disetujui: <strong>{{ application_stats.approved or 0 }}</strong></span>
+            <span>Diarsipkan: <strong>{{ application_stats.archived or 0 }}</strong></span>
+            <span>Sudah dikirim: <strong>{{ application_stats.with_applied_at or 0 }}</strong></span>
+          </div>
+        </div>
+        <span class="result-count">{{ applications|length }} draf aktif tampil</span>
+      </div>
+      <form class="filters application-filters" method="get" action="{{ url_for('review_page') }}">
+        <input type="hidden" name="q" value="{{ search }}">
+        <input type="hidden" name="source" value="{{ selected_source }}">
+        <input type="hidden" name="eligibility" value="{{ selected_eligibility }}">
+        <input type="hidden" name="min_score" value="{{ min_score }}">
+        <label><span>Filter status aplikasi</span>
+          <select name="app_status">
+            <option value="">Semua status</option>
+            {% for item in application_statuses %}
+            <option value="{{ item }}" {% if app_status == item %}selected{% endif %}>{{ application_status_labels.get(item, item|replace('_', ' ')|title) }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <a class="reset-link" href="{{ url_for('review_page') }}">Reset status</a>
+      </form>
+
+      {% if applications %}
+      <div class="table-wrap">
+        <table class="applications-table">
+          <thead><tr><th>No.</th><th>Lowongan</th><th>Skor</th><th>Status aplikasi</th><th>Pengiriman</th><th>Surat lamaran</th><th>Tautan</th><th>Tindakan</th></tr></thead>
+          <tbody>
+          {% for item in applications %}
+            <tr>
+              <td><span class="application-id">{{ loop.index }}</span><small class="subcell">Job ID {{ item.job_id }}</small></td>
+              <td class="job-cell">
+                <strong>{{ item.title or 'Untitled' }}</strong>
+                <span>{{ item.company_name }}</span>
+                <small>{{ item.display_location or item.location or 'Lokasi tidak tercantum' }}</small>
+                {% if item.country and item.country|lower != (item.display_location or item.location or '')|lower %}<small class="subcell">{{ item.country }}</small>{% endif %}
+                {% if item.location_details %}
+                  <details class="location-details"><summary>Penjelasan lokasi &amp; jam kerja</summary><span>{{ item.location_details }}</span></details>
+                {% endif %}
+              </td>
+              <td>{% if item.match_score is not none %}<span class="score {% if item.match_score >= 80 %}score-high{% elif item.match_score >= 60 %}score-mid{% else %}score-low{% endif %}">{{ '%.0f'|format(item.match_score) }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td><span class="status-chip">{{ application_status_labels.get(item.application_status, item.application_status|replace('_', ' ')|title) }}</span>{% if item.eligibility_status %}<small class="subcell">{{ eligibility_labels.get(item.eligibility_status, item.eligibility_status|replace('_', ' ')|title) }}</small>{% endif %}</td>
+              <td>{% if item.applied_at %}<span class="status-chip submitted-chip">Tanggal tercatat</span><small class="subcell">{{ item.applied_at.strftime('%Y-%m-%d %H:%M') if item.applied_at.strftime is defined else item.applied_at }}</small>{% else %}<span class="status-chip pending-chip">Belum dikirim</span><small class="subcell">applied_at = NULL</small>{% endif %}</td>
+              <td class="letter-cell">
+                {% if item.cover_letter %}
+                  <details class="letter-preview"><summary>Lihat surat</summary><div class="letter-text">{{ item.cover_letter }}<br><br>Kind regards,<br>Claudia</div></details>
+                  <a class="open-link pdf-download-link" href="{{ url_for('application_cover_letter_pdf', application_id=item.application_id) }}">Unduh PDF ↗</a>
+                {% else %}<span class="muted">Belum ada surat</span>{% endif %}
+                {% if item.match_reason or item.notes %}<details class="location-details"><summary>Catatan</summary><span>{{ item.match_reason or '' }}{% if item.notes %} {{ item.notes }}{% endif %}</span></details>{% endif %}
+              </td>
+              <td>{% if item.job_url %}<a class="open-link" href="{{ item.job_url }}" target="_blank" rel="noopener noreferrer">Buka ↗</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+              <td class="actions-cell">
+                {% if item.application_status in ['pending_approval', 'draft_review', 'draft'] %}
+                  <form method="post" action="{{ url_for('application_action', application_id=item.application_id) }}" class="action-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_app_status" value="{{ app_status }}">
+                    <button type="submit" name="action" value="approve" class="action-button approve-button">Setujui draf</button>
+                  </form>
+                  <form method="post" action="{{ url_for('application_action', application_id=item.application_id) }}" class="action-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_app_status" value="{{ app_status }}">
+                    <button type="submit" name="action" value="archive" class="action-button archive-button">Arsipkan</button>
+                  </form>
+                {% elif item.application_status == 'approved' and not item.applied_at %}
+                  <form method="post" action="{{ url_for('application_action', application_id=item.application_id) }}" class="action-form submitted-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_app_status" value="{{ app_status }}">
+                    <label class="confirm-submitted"><input type="checkbox" name="confirm_submitted" value="yes" required> Saya sudah mengirim di situs resmi</label>
+                    <button type="submit" name="action" value="mark_submitted" class="action-button submitted-button">Catat pengiriman</button>
+                  </form>
+                  <form method="post" action="{{ url_for('application_action', application_id=item.application_id) }}" class="action-form">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_app_status" value="{{ app_status }}">
+                    <button type="submit" name="action" value="archive" class="action-button archive-button">Arsipkan</button>
+                  </form>
+                {% elif item.application_status == 'archived' %}
+                  <span class="muted">Diarsipkan</span>
+                {% elif item.application_status in ['submitted', 'applied'] or item.applied_at %}
+                  <span class="muted">Pengiriman tercatat; riwayat dipertahankan</span>
+                {% else %}
+                  <span class="muted">—</span>
+                {% endif %}
+                {% if item.application_status not in ['submitted', 'applied'] and not item.applied_at %}
+                  <form method="post" action="{{ url_for('application_action', application_id=item.application_id) }}" class="action-form" onsubmit="return confirm('Hapus permanen draf ini dari database dan folder application_packets terkait? Data lowongan, skor, dan daftar pilihan tetap tersimpan.');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="return_app_status" value="{{ app_status }}">
+                    <button type="submit" name="action" value="delete" class="action-button delete-button">Hapus draf</button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+        <div class="empty-state"><div class="empty-icon">▤</div><h3>Belum ada draf untuk filter ini</h3><p>Draf tersimpan akan muncul di sini. Arsip hanya mengubah status; catatan tidak dihapus.</p></div>
+      {% endif %}
+    </section>
+
+    {% endif %}
+
+    {% if page == "documents" %}
+      <section class="panel placeholder-panel">
+        <div class="placeholder-icon">▤</div>
+        <h3>CV &amp; Documents</h3>
+        <p>Folder CV yang terdeteksi pada generator saat ini adalah <code>cv\CV_English.pdf</code>. Halaman ini belum membaca atau mengubah file secara langsung.</p>
+        <div class="placeholder-row"><span>CV utama</span><strong>CV_English.pdf</strong></div>
+        <div class="placeholder-row"><span>Lokasi proyek</span><strong>{{ project_root }}\cv\</strong></div>
+        <p class="muted">Pastikan CV tetap diperbarui secara manual. Tidak ada file yang diunggah ke layanan eksternal oleh halaman ini.</p>
+      </section>
+    {% elif page == "automation" %}
+      <section class="panel automation-panel">
+        <div class="automation-hero">
+          <div class="placeholder-icon">↻</div>
+          <div>
+            <h3>Jalankan Job Discovery + Scoring</h3>
+            <p>Kirim perintah dari dashboard ke webhook n8n. Workflow manual terpisah ini hanya mencari lowongan dan memperbarui skor; tidak ada node pengiriman lamaran.</p>
+          </div>
+          {% if n8n_manual_configured %}<span class="automation-status configured">Konfigurasi terisi</span>{% else %}<span class="automation-status not-configured">Perlu konfigurasi</span>{% endif %}
+        </div>
+        {% if n8n_manual_configured %}
+          <form method="post" action="{{ url_for('trigger_manual_n8n_workflow') }}" class="manual-run-form" data-confirm="Jalankan workflow manual n8n sekarang? Hanya discovery dan scoring yang diproses; lamaran tidak dikirim." onsubmit="return aijsSubmitManualRun(this);">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="return_to" value="automation">
+            <button type="submit" class="manual-run-button">↻ Jalankan workflow sekarang</button>
+            <span class="manual-run-progress" role="status" aria-live="polite"></span>
+            <span class="muted">Tombol akan menunggu sampai discovery dan scoring selesai, lalu memuat ulang data.</span>
+          </form>
+        {% else %}
+          <div class="notice automation-notice">Tombol akan aktif setelah webhook manual n8n dan tokennya disetel. Jangan memasukkan token pada chat atau screenshot.</div>
+        {% endif %}
+        <div class="component-grid">
+          <div class="component-card"><span>Database</span><strong>MySQL</strong><small>Menyimpan lowongan &amp; skor</small></div>
+          <div class="component-card"><span>Workflow</span><strong>n8n</strong><small>Menjalankan langkah otomatis</small></div>
+          <div class="component-card"><span>Dashboard</span><strong>Flask</strong><small>Port lokal 5000</small></div>
+          <div class="component-card"><span>API</span><strong>Flask API</strong><small>Port lokal 8000</small></div>
+        </div>
+      </section>
+      <section class="panel automation-guide">
+        <h3>Penyiapan pertama kali — ikuti berurutan</h3>
+        <p class="muted">Lakukan sekali saja. Kamu tidak perlu mengubah workflow jadwal harian yang sudah berjalan.</p>
+        <ol>
+          <li><strong>Buka n8n dari Control Center Desktop.</strong> Buka terminal menu <em>AI Job Seeker - Control Center (D:)</em>, ketik <code>10</code>, lalu tekan Enter. Browser n8n akan terbuka.</li>
+          <li><strong>Impor workflow baru.</strong> Di n8n, pilih menu import dari file dan pilih <code>n8n_manual_discovery_score.json</code> dari folder paket update yang sudah diekstrak. Nama workflow: <strong>AI Job Seeker - Manual Discovery &amp; Score</strong>. Jangan mengganti workflow harian.</li>
+          <li><strong>Atur keamanan pada node Manual Trigger.</strong> Buka node itu dan pilih autentikasi <strong>Header Auth</strong>. Pada Credentials, buat credential baru dengan Header Name <code>X-AIJobSeeker-Token</code>. Untuk membuat token, buka jendela PowerShell baru (bukan menu Control Center), jalankan perintah di bawah, lalu salin hasilnya secara privat.</li>
+        </ol>
+        <pre class="env-example">python -c "import secrets; print(secrets.token_urlsafe(32))"</pre>
+        <ol start="4">
+          <li><strong>Masukkan API key proyek.</strong> Pada node <strong>Discover Jobs</strong> dan <strong>Score Jobs</strong>, ganti teks <code>REPLACE_WITH_JOBSEEKER_API_TOKEN</code> dengan nilai <code>JOBSEEKER_API_TOKEN</code> dari file <code>{{ project_root }}\.env</code>. Jangan kirim atau tampilkan token lewat chat/screenshot.</li>
+          <li><strong>Hubungkan dan aktifkan.</strong> Pastikan alurnya <strong>Manual Trigger → Discover Jobs → Score Jobs</strong>. Tidak boleh ada node Auto Apply/email. Klik Save lalu Publish/Activate workflow. Gunakan URL webhook produksi: <code>http://127.0.0.1:5678/webhook/ai-job-seeker-manual</code>.</li>
+          <li><strong>Simpan pengaturan di dashboard.</strong> Buka <code>{{ project_root }}\.env</code> menggunakan Notepad. Biarkan semua baris lama, lalu tambahkan dua baris di bawah. Ganti nilai kedua dengan token yang sama persis seperti Header Auth.</li>
+        </ol>
+        <pre class="env-example">N8N_MANUAL_WEBHOOK_URL=http://127.0.0.1:5678/webhook/ai-job-seeker-manual
+N8N_MANUAL_WEBHOOK_TOKEN=MASUKKAN_TOKEN_YANG_SAMA_DARI_LANGKAH_3</pre>
+        <div class="notice">
+          <strong>Terakhir: restart Dashboard lewat menu desktop.</strong> Kembali ke terminal <em>AI Job Seeker - Control Center (D:)</em>, ketik <code>7</code>, lalu tekan Enter untuk <strong>Restart Dashboard</strong>. Jangan mengetik perintah Python pada menu bernomor tersebut. Workflow harian tidak perlu diubah.
+        </div>
+        <p>Setelah restart, buka dashboard lagi (pilihan <code>9</code> pada Control Center) dan klik <strong>Jalankan workflow sekarang</strong>. Untuk memastikan proses selesai, buka n8n lalu pilih <strong>Executions</strong>; pastikan node Discover Jobs dan Score Jobs berhasil.</p>
+      </section>
+    {% elif page == "settings" %}
+      <section class="panel settings-panel">
+        <div class="placeholder-icon">⚙</div>
+        <h3>Pengaturan pencarian kerja</h3>
+        <p>Perubahan disimpan ke profil di MySQL. Profesi dan skills digunakan oleh scoring; profesi target juga digunakan oleh pencarian pada proses discovery berikutnya.</p>
+        <form method="post" action="{{ url_for('save_settings') }}" class="settings-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="settings-field">
+            <label for="profile_name">Nama profil</label>
+            <input id="profile_name" value="{{ profile_settings.profile_name }}" readonly>
+            <small>Identitas profil tetap; yang bisa diedit adalah preferensi pencarian di bawah.</small>
+          </div>
+          <div class="settings-field">
+            <label for="target_roles">Profesi target (satu profesi per baris)</label>
+            <textarea id="target_roles" name="target_roles" rows="5" required>{{ profile_settings.target_roles|join('\n') }}</textarea>
+          </div>
+          <div class="settings-field">
+            <label for="skills">Skills (satu skill per baris)</label>
+            <textarea id="skills" name="skills" rows="5" required>{{ profile_settings.skills|join('\n') }}</textarea>
+          </div>
+          <div class="settings-field">
+            <label for="preferred_countries">Prioritas lokasi (satu per baris)</label>
+            <textarea id="preferred_countries" name="preferred_countries" rows="4" required>{{ profile_settings.preferred_countries|join('\n') }}</textarea>
+          </div>
+          <div class="settings-field">
+            <label for="preferred_workplace_types">Tipe tempat kerja (satu per baris)</label>
+            <textarea id="preferred_workplace_types" name="preferred_workplace_types" rows="3">{{ profile_settings.preferred_workplace_types|join('\n') }}</textarea>
+          </div>
+          <div class="settings-two-col">
+            <div class="settings-field">
+              <label for="minimum_salary">Gaji minimum (opsional)</label>
+              <input id="minimum_salary" name="minimum_salary" type="number" min="0" step="any" value="{{ profile_settings.minimum_salary }}">
+            </div>
+            <div class="settings-field">
+              <label for="salary_currency">Mata uang</label>
+              <select id="salary_currency" name="salary_currency">
+                {% for currency in ['AUD','USD','SGD','IDR','EUR','GBP'] %}
+                  <option value="{{ currency }}" {% if profile_settings.salary_currency == currency %}selected{% endif %}>{{ currency }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <div class="settings-field">
+            <label for="cv_path">Lokasi file CV PDF</label>
+            <input id="cv_path" name="cv_path" value="{{ profile_settings.cv_path }}" maxlength="500">
+            <small>Path lokal saja. File tidak diunggah saat menyimpan pengaturan.</small>
+          </div>
+          <div class="settings-actions">
+            <button type="submit" class="primary-button">Simpan pengaturan</button>
+            <a class="reset-link" href="{{ url_for('settings_page') }}">Muat ulang nilai tersimpan</a>
+          </div>
+        </form>
+        <p class="muted">Setelah menyimpan, jalankan Job Discovery dan scoring lagi agar perubahan profesi/skills diterapkan pada lowongan. Gaji minimum saat ini disimpan sebagai preferensi; filter gaji otomatis baru berlaku bila sumber lowongan menyediakan data gaji terstruktur.</p>
+      </section>
+    {% endif %}
+
+    <p class="footer-note">Dashboard hanya mengubah status review yang dipilih pengguna dan membuka tautan resmi. Tidak ada lamaran yang dikirim otomatis.</p>
+    </main>
+  </div>
+<style id="aijs-workflow-feedback-style">
+.manual-run-button:disabled{opacity:.72;cursor:wait;filter:saturate(.75)}
+.manual-run-progress{display:block;min-height:1em;color:#9fc7ff;font-size:11px;line-height:1.45}
+</style>
+<script id="aijs-manual-workflow-feedback-script">
+function aijsSubmitManualRun(form){
+  if(form.dataset.submitting==='true')return false;
+  const promptText=form.dataset.confirm||'Jalankan discovery dan scoring sekarang?';
+  if(!window.confirm(promptText))return false;
+  form.dataset.submitting='true';
+  const button=form.querySelector('button[type="submit"]');
+  if(button){button.disabled=true;button.setAttribute('aria-busy','true');button.textContent='⏳ Sedang menjalankan...';}
+  const status=form.querySelector('.manual-run-progress');
+  if(status)status.textContent='Discovery dan scoring sedang diproses. Jangan klik ulang; halaman akan diperbarui setelah selesai.';
+  return true;
+}
+</script>
+<script id="aijs-review-tabs-v2-script">
+(function(){
+  const list=document.getElementById('review-tablist');
+  if(!list)return;
+  const tabs=Array.from(list.querySelectorAll('[role="tab"][data-review-panel]'));
+  const activate=function(tab,focus){
+    if(!tab)return;
+    tabs.forEach(function(item){
+      const active=item===tab;
+      item.classList.toggle('is-active',active);
+      item.setAttribute('aria-selected',active?'true':'false');
+      item.tabIndex=active?0:-1;
+      const panel=document.getElementById(item.dataset.reviewPanel);
+      if(panel){panel.hidden=!active;panel.classList.toggle('is-active',active);}
+    });
+    if(focus)tab.focus();
+  };
+  const activateFromHash=function(){
+    const hash=window.location.hash.replace(/^#/,'');
+    const target=tabs.find(function(tab){return tab.dataset.reviewPanel===hash;});
+    if(target)activate(target,false);
+  };
+  tabs.forEach(function(tab,index){
+    tab.addEventListener('click',function(){
+      activate(tab,false);
+      if(window.history&&window.history.replaceState){window.history.replaceState(null,'','#'+tab.dataset.reviewPanel);}
+    });
+    tab.addEventListener('keydown',function(event){
+      let next=null;
+      if(event.key==='ArrowRight')next=tabs[(index+1)%tabs.length];
+      else if(event.key==='ArrowLeft')next=tabs[(index-1+tabs.length)%tabs.length];
+      else if(event.key==='Home')next=tabs[0];
+      else if(event.key==='End')next=tabs[tabs.length-1];
+      if(next){event.preventDefault();activate(next,true);if(window.history&&window.history.replaceState){window.history.replaceState(null,'','#'+next.dataset.reviewPanel);}}
+    });
+  });
+  const hash=window.location.hash.replace(/^#/,'');
+  const hashTab=tabs.find(function(tab){return tab.dataset.reviewPanel===hash;});
+  const serverSelected=tabs.find(function(tab){return tab.getAttribute('aria-selected')==='true';});
+  activate(hashTab||serverSelected||tabs[0],false);
+  window.addEventListener('hashchange',activateFromHash);
+})();
+</script>
+<style id="aijs-job-discovery-pagination-v1">
+.jobs-pagination{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px 18px;border-top:1px solid var(--border,#263b59);margin-top:2px}
+.jobs-pagination-summary{font-size:12px;color:var(--muted,#9aabc4)}
+.jobs-pagination-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.jobs-page-link{display:inline-flex;align-items:center;justify-content:center;min-width:34px;min-height:34px;padding:7px 10px;border:1px solid var(--border,#263b59);border-radius:8px;background:var(--panel-2,#0d192b);color:var(--text,#e8eef8);font-size:12px;font-weight:700;text-decoration:none}
+.jobs-page-link:hover{border-color:#5798f6;color:#fff}
+.jobs-page-link.is-current{background:#245b9d;border-color:#5798f6;color:#fff}
+.jobs-page-link.is-disabled{opacity:.4;pointer-events:none}
+.jobs-page-ellipsis{padding:0 3px;color:var(--muted,#9aabc4)}
+@media(max-width:720px){.jobs-pagination{align-items:flex-start}.jobs-pagination-controls{width:100%}.jobs-page-link{min-width:31px}}
+</style>
+<script id="aijs-auto-apply-filters-v1">
+(function () {
+  document.querySelectorAll('form.filters, form.application-filters').forEach(function (form) {
+    form.querySelectorAll('select').forEach(function (select) {
+      select.addEventListener('change', function () {
+        if (form.dataset.autoSubmitting === '1') return;
+        form.dataset.autoSubmitting = '1';
+        if (typeof form.requestSubmit === 'function') form.requestSubmit();
+        else form.submit();
+      });
+    });
+  });
+})();
+</script>
+<style id="aijs-source-catalog-search-style">
+.source-catalog-search{display:flex;align-items:center;gap:10px;max-width:560px;margin:10px 0 14px;color:var(--muted,#9aabc4);font-size:12px}
+.source-catalog-search input{flex:1;min-width:180px;background:var(--panel-2,#0d192b);border:1px solid var(--border,#263b59);border-radius:9px;color:inherit;padding:9px 11px}
+.source-card[hidden]{display:none!important}
+</style>
+<script id="aijs-source-catalog-live-search">
+(function(){
+  const input=document.getElementById('source-catalog-search-input');
+  const grid=document.getElementById('source-catalog-grid');
+  if(!input||!grid)return;
+  const cards=Array.from(grid.querySelectorAll('.source-card'));
+  input.addEventListener('input',function(){
+    const query=input.value.trim().toLowerCase();
+    cards.forEach(function(card){card.hidden=!!query&&!String(card.dataset.sourceSearch||'').includes(query);});
+  });
+})();
+</script>
+</body>
+</html>

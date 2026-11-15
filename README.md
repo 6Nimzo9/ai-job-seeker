@@ -137,6 +137,23 @@ It is to build practical AI systems that reduce repetitive work, integrate multi
 
 ---
 
-**Developer:** Claud  
-**GitHub:** https://github.com/6Nimzo9  
+**Developer:** Claud
+**GitHub:** https://github.com/6Nimzo9
 **Project:** AI Job Seeker
+
+## Engineering Documentation
+
+- [Engineering Case Study](docs/ENGINEERING_CASE_STUDY.md)
+- [Architecture, Guardrails, and Evaluation](docs/ARCHITECTURE_AND_EVALUATION.md)
+
+## Automated Tests
+
+The repository includes 32 automated unit tests covering application workflow controls, query safety, job-source behavior, and eligibility checks.
+
+Run the suite with:
+
+```powershell
+python -m unittest discover -s tests -v
+```
+
+**Latest local validation:** 32 tests passed on November 15, 2026. The suite uses simulated database behavior and controlled failure scenarios; this is not a production-scale reliability claim.

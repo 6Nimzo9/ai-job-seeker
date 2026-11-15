@@ -218,3 +218,54 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AI JOB SEEKER PORTFOLIO - SECURITY EXCLUSIONS
+
+# Credentials and environment configuration
+.env
+.env.*
+!.env.example
+**/*oauth*secret*.json
+**/*oauth*token*.json
+**/client_secret*.json
+**/credentials*.json
+**/token*.json
+**/*secret*.json
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+
+# Personal documents and application data
+**/cv/
+**/CV*.pdf
+**/application_packets*/
+**/application_pilots/
+**/drafts/
+**/logs/
+**/backups/
+**/backup_*/
+**/*_setup/
+
+# Local databases and exported records
+**/*.db
+**/*.sqlite
+**/*.sqlite3
+**/*.sql
+**/*.dump
+**/*.csv
+
+# Logs, backups, temporary files and archives
+*.log
+*.bak
+*.bak_*
+*.backup*
+*.tmp
+*.zip
+*.7z
+*.rar
+
+# Local automation configuration and runtime data
+auto_apply_config.json
+source_registry.json
+instance/
